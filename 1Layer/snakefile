@@ -27,7 +27,7 @@ rule Grid_Search:
         runtime = 1440
     threads: 128
     conda:
-        './envs/ml'
+        './envs/ml.yml'
     script:
         './1Layer/MLP_1Layer.py'
 
