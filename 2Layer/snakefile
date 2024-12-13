@@ -1,6 +1,7 @@
 configfile: './config.yml'
 
-CHUNK = config['chunk']
+
+CHUNK = [i for i in range(1000)]
 basepath_2 = './output_2Layer'
 
 
@@ -13,22 +14,22 @@ rule all:
 
 rule Grid_Search:
     input:
-        inputfile = './TCGA.integrative.model.input.by.rdgv.noSOD11.tsv',
-        permutations = './Genes.20000.combination.for.ML.set.tsv.gz'
+        inputfile = config['input'],
+        permutations = config['permutations']
     output:
         f'{basepath_2}/MLP_2L_.ALL.permutation.{{CHUNK}}.tsv',
         f'{basepath_2}/MLP_2L.ALL.AUC.{{CHUNK}}.tsv',
         f'{basepath_2}/MLP_2L.ALL.GS_params.{{CHUNK}}.tsv',
         f'{basepath_2}/MLP_2L.ALL.score.{{CHUNK}}.tsv'
     params:
-        chunk = f'{{CHUNK}}'
+        selection = f'{{CHUNK}}'
     resources:
-        mem_mb = 131072,
-        runtime = 1440
-    threads: 128
+        mem_mb = 16384,
+        runtime = 30
+    threads: 64
     conda:
         './envs/ml.yml'
     script:
         './2Layer/MLP_2Layer.py'
 
-# snakemake --executor slurm -j 20 --keep-going --use-conda -n
+# snakemake --executor slurm -j 20 --keep-going --use-conda -j 40-n

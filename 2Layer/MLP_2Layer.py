@@ -1,7 +1,6 @@
 import numpy as np
 import scipy.stats as sts
 import pandas as pd
-from sklearn.model_selection import  train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import StratifiedShuffleSplit, GridSearchCV
 
@@ -14,7 +13,6 @@ from sklearn.metrics import f1_score
 from sklearn.metrics import accuracy_score
 
 from sklearn.preprocessing import StandardScaler
-from joblib import Parallel, delayed
 import sys
 
 
@@ -25,12 +23,8 @@ name = 'MLP_2L'
 pre_selected_gene = pd.read_csv(snakemake.input['permutations'], sep='\t', compression='gzip',index_col=0)
 # Number of second repeats
 second_repeat = 5
-chuck = 200   # To split the 20k permutations in 200 chunks of 100 selections
-chucknumber = int(snakemake.params['chunk']) # range(0 to N chuncks - 1)
-permutation_range = np.arange(0, len(pre_selected_gene), int(len(pre_selected_gene)/chuck))
-permutation_range_finish = np.arange(100, len(pre_selected_gene) + 100, int(len(pre_selected_gene)/chuck))
-start_point = [i for k,i in enumerate(permutation_range)][chucknumber]
-end_point = [i for k,i in enumerate(permutation_range_finish)][chucknumber]
+# Chunk number == number of selection (0 to 20000)
+chucknumber = int(snakemake.params['selection'])
 basepath = './output_2Layer'
 
 
@@ -49,6 +43,19 @@ data = data[['case_con_zvalues', 'two_hit_zvalues', 'RDGV_by_nonRDGV', 'Tau_scor
        'deletion.freq', 'clin_zvalue', 'avg_ALL',
        'Bidirectional_Deletion', 'Edition_efficiency', 'Guide_Abundance',
        'Insertion', 'Insertion_Deletion', 'PAM_Proximal_Deletion', 'Is_positive']]
+
+
+### DEFINING THE GRID SEARCH
+np.random.seed(35)
+MLP = MLPClassifier(early_stopping = True, random_state = 35)
+param_grid = {'hidden_layer_sizes' : [(4,4), (8,8), (16,16), (32,32)],
+              'activation' : ['relu', 'logistic', 'tanh', 'identity'],
+              'solver' : ['lbfgs', 'adam', 'sgd'],
+              'alpha' : np.logspace(-3, 0, 4),
+              'learning_rate' : ['constant', 'invscaling', 'adaptive'],
+              'learning_rate_init' : [0.001, 0.01, 0.1],
+              'max_iter' : [200, 500]
+}
 x_col = ['case_con_zvalues', 'two_hit_zvalues', 'RDGV_by_nonRDGV', 'Tau_score',
        'oe_lof_upper', 'PTM_pvalue', 'PTV_frequency', 'amplification.freq',
        'deletion.freq', 'clin_zvalue', 'avg_ALL',
@@ -65,7 +72,7 @@ data_for_training1 = pd.DataFrame(data = scaler.fit_transform(data_x ) ,index=da
 ### DEFINING THE SEARCH SPACE
 np.random.seed(35)
 MLP = MLPClassifier(early_stopping = True, random_state = 35)
-param_grid = {'hidden_layer_sizes' : [(8,8), (16,16), (32,32), (64,64)],
+param_grid = {'hidden_layer_sizes' : [(4,4), (8,8), (16,16), (32,32)],
               'activation' : ['relu', 'logistic', 'tanh', 'identity'],
               'solver' : ['lbfgs', 'adam', 'sgd'],
               'alpha' : np.logspace(-3, 0, 4),
@@ -102,7 +109,7 @@ def process_iteration(i,pre_selcted_genes=pre_selected_gene):
         X_train, X_test = X.iloc[train], X.iloc[test]
         y_train, y_test = y.iloc[train], y.iloc[test]
         # MODEL Fitting
-        grid_search = GridSearchCV(MLP, param_grid, cv=5, scoring='accuracy', n_jobs=-1, verbose=0)
+        grid_search = GridSearchCV(MLP, param_grid, cv=5, scoring='accuracy', n_jobs = snakemake.threads, verbose=0)
         grid_search.fit(X_train, y_train.values.ravel())
         best_model = grid_search.best_estimator_
         GS_results.append(pd.DataFrame([grid_search.best_params_], index=['%s_%s'%(i,j)]))
@@ -133,8 +140,9 @@ def process_iteration(i,pre_selcted_genes=pre_selected_gene):
     KKKK.append([DF_gene,DF_score,M2,GS_results])
     return KKKK   
 
-np.random.seed(35)
-result =  Parallel(n_jobs=-1)(delayed(process_iteration)(i) for i in range(start_point, end_point) )
+
+### RUNNING THE GRID SEARCH
+process_iteration(chucknumber)
 
 ### EXTRACTING THE RESULTS
 re_result_shape =np.array(result,dtype='object').reshape(-1, np.array(result,dtype='object').shape[-1])
